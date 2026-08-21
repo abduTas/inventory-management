@@ -50,6 +50,48 @@ export async function createProductAction(data: ProductInput) {
   return { success: true, product };
 }
 
+export async function updateProductAction(productId: string, data: ProductInput) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("products")
+    .update({
+      sku: data.sku,
+      name: data.name,
+      cost_price: data.cost_price,
+      sell_price: data.sell_price,
+      reorder_level: data.reorder_level ?? null,
+      barcode: data.barcode || null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", productId);
+
+  if (error) return { error: error.message };
+  return { success: true };
+}
+
+export async function exportInventoryCsv() {
+  const ctx = await getStoreContext();
+  if (!ctx) return { error: "No store" };
+
+  const supabase = await createClient();
+  const { data: products } = await supabase
+    .from("products")
+    .select("sku, name, cost_price, sell_price, reorder_level, inventory_levels(quantity_on_hand)")
+    .eq("store_id", ctx.store.id)
+    .eq("is_active", true)
+    .order("name");
+
+  const header = "SKU,Name,Cost Price,Sell Price,Stock,Reorder Level";
+  const rows = (products ?? []).map((p) => {
+    const qty = Array.isArray(p.inventory_levels)
+      ? p.inventory_levels[0]?.quantity_on_hand ?? 0
+      : (p.inventory_levels as { quantity_on_hand: number } | null)?.quantity_on_hand ?? 0;
+    return [p.sku, `"${p.name}"`, p.cost_price, p.sell_price, qty, p.reorder_level ?? ""].join(",");
+  });
+
+  return { csv: [header, ...rows].join("\n") };
+}
+
 export async function updateStockAction(
   productId: string,
   quantityChange: number,

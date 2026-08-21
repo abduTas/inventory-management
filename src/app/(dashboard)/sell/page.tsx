@@ -22,6 +22,7 @@ export default function SellPage() {
   const [currency, setCurrency] = useState("INR");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("cash");
 
   useEffect(() => {
     async function load() {
@@ -89,7 +90,7 @@ export default function SellPage() {
     setLoading(true);
     setError("");
     try {
-      const sale = await completeSale(storeId, cart, "cash");
+      const sale = await completeSale(storeId, cart, paymentMethod);
       setCart([]);
       router.push(`/sell/${sale.id}`);
       router.refresh();
@@ -167,6 +168,23 @@ export default function SellPage() {
                 </div>
               ))}
               <div className="border-t border-slate-200 pt-3">
+                <label className="mb-2 block text-sm font-medium text-slate-700">Payment method</label>
+                <div className="mb-3 grid grid-cols-4 gap-1">
+                  {["cash", "card", "upi", "other"].map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setPaymentMethod(m)}
+                      className={`rounded-lg border px-2 py-2 text-xs font-medium capitalize ${
+                        paymentMethod === m
+                          ? "border-emerald-500 bg-emerald-50 text-emerald-700"
+                          : "border-slate-200 text-slate-600"
+                      }`}
+                    >
+                      {m}
+                    </button>
+                  ))}
+                </div>
                 <div className="flex justify-between text-lg font-bold">
                   <span>Total</span>
                   <span>{formatCurrency(total, currency)}</span>

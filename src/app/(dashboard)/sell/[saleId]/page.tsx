@@ -4,6 +4,7 @@ import { Header } from "@/components/layout/header";
 import { Card } from "@/components/ui/card";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { notFound } from "next/navigation";
+import { VoidSaleButton } from "@/containers/sell/void-sale-button";
 
 export default async function ReceiptPage({
   params,
@@ -34,8 +35,8 @@ export default async function ReceiptPage({
   return (
     <>
       <Header title="Receipt" />
-      <main className="mx-auto w-full max-w-lg p-4">
-        <Card>
+      <main className="mx-auto w-full max-w-lg space-y-4 p-4 print:p-0">
+        <Card className="print:shadow-none">
           <div className="text-center">
             <p className="text-sm text-slate-500">Sale #{sale.sale_number}</p>
             <p className="text-xs text-slate-400">{formatDate(sale.created_at)}</p>
@@ -55,6 +56,12 @@ export default async function ReceiptPage({
               <span>Subtotal</span>
               <span>{formatCurrency(Number(sale.subtotal), currency)}</span>
             </div>
+            {Number(sale.discount) > 0 && (
+              <div className="flex justify-between text-emerald-600">
+                <span>Discount</span>
+                <span>-{formatCurrency(Number(sale.discount), currency)}</span>
+              </div>
+            )}
             <div className="flex justify-between">
               <span>Tax</span>
               <span>{formatCurrency(Number(sale.tax), currency)}</span>
@@ -68,6 +75,9 @@ export default async function ReceiptPage({
             </p>
           </div>
         </Card>
+        <div className="print:hidden">
+          <VoidSaleButton saleId={saleId} status={sale.status} />
+        </div>
       </main>
     </>
   );

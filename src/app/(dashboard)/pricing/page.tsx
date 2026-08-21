@@ -1,21 +1,23 @@
+import { createClient } from "@/lib/supabase/server";
 import { Header } from "@/components/layout/header";
-import { Card, CardHeader } from "@/components/ui/card";
+import { getStoreContext } from "@/lib/helpers/store-context";
+import { PricingContainer } from "@/containers/pricing/pricing-container";
 
-export default function PricingPage() {
+export default async function PricingPage() {
+  const ctx = await getStoreContext();
+  const supabase = await createClient();
+
+  const { data: promotions } = await supabase
+    .from("promotions")
+    .select("*")
+    .eq("store_id", ctx?.store.id ?? "")
+    .order("created_at", { ascending: false });
+
   return (
     <>
       <Header title="Pricing" />
-      <main className="mx-auto w-full max-w-6xl p-4">
-        <Card>
-          <CardHeader
-            title="Pricing & promotions"
-            description="Set sell prices on each product. Promotions coming soon."
-          />
-          <p className="text-sm text-slate-500">
-            Edit product prices from the Inventory section. Bulk price updates and
-            promotions will be added in a future update.
-          </p>
-        </Card>
+      <main className="mx-auto w-full max-w-2xl p-4">
+        <PricingContainer promotions={promotions ?? []} />
       </main>
     </>
   );

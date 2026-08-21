@@ -8,6 +8,7 @@ import { getStockQty, isLowStock } from "@/types/database";
 import { getStoreContext } from "@/lib/helpers/store-context";
 import Link from "next/link";
 import { Plus } from "lucide-react";
+import { ExportInventoryButton } from "@/containers/inventory/export-inventory-button";
 
 export default async function InventoryPage() {
   const supabase = await createClient();
@@ -27,7 +28,8 @@ export default async function InventoryPage() {
     <>
       <Header title="Inventory" />
       <main className="mx-auto w-full max-w-6xl space-y-4 p-4">
-        <div className="flex justify-end">
+        <div className="flex justify-end gap-2">
+          <ExportInventoryButton />
           <Link href="/inventory/new">
             <Button size="sm">
               <Plus className="h-4 w-4" />

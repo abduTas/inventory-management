@@ -80,7 +80,14 @@ export default function SettingsPage() {
 
         <Card>
           <CardHeader title="Account" />
-          <Button
+          <div className="space-y-2">
+            <a
+              href="/settings/notifications"
+              className="block rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Notification preferences
+            </a>
+            <Button
             variant="danger"
             className="w-full"
             onClick={async () => {
@@ -90,6 +97,7 @@ export default function SettingsPage() {
           >
             Sign out
           </Button>
+          </div>
         </Card>
       </main>
     </>

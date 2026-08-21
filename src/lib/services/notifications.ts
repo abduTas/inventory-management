@@ -8,19 +8,29 @@ import { getEffectiveThreshold, getStockQty } from "@/types/database";
 export async function checkAndSendLowStockAlert(
   product: Product,
   store: Store,
-  userId: string
+  userId: string,
+  previousQty?: number
 ) {
   const qty = getStockQty(product);
   const threshold = getEffectiveThreshold(product, store.default_reorder_level);
 
-  if (qty > threshold) return;
-  if (product.last_alerted_at) {
-    const lastAlert = new Date(product.last_alerted_at);
-    const hoursSince = (Date.now() - lastAlert.getTime()) / (1000 * 60 * 60);
-    if (hoursSince < 24) return;
+  // Only alert when stock crosses threshold (was above, now at/below)
+  if (previousQty !== undefined) {
+    if (!(previousQty > threshold && qty <= threshold)) return;
+  } else if (qty > threshold) {
+    return;
   }
 
   const supabase = await createClient();
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("push_alerts_enabled, telegram_chat_id")
+    .eq("id", userId)
+    .single();
+
+  if (profile?.push_alerts_enabled === false) return;
+
   const title = "Low stock alert";
   const body = `${product.name} (${product.sku}) — ${qty} units left (threshold: ${threshold})`;
 
@@ -63,24 +73,15 @@ export async function checkAndSendLowStockAlert(
     );
   }
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("telegram_chat_id")
-    .eq("id", userId)
-    .single();
-
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
   if (botToken && profile?.telegram_chat_id) {
-    await fetch(
-      `https://api.telegram.org/bot${botToken}/sendMessage`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chat_id: profile.telegram_chat_id,
-          text: `🔔 ${body}`,
-        }),
-      }
-    );
+    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: profile.telegram_chat_id,
+        text: `🔔 ${body}`,
+      }),
+    });
   }
 }

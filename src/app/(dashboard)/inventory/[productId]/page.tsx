@@ -53,6 +53,13 @@ export default async function ProductDetailPage({
           <StockAdjustForm productId={productId} />
         </Card>
 
+        <a
+          href={`/inventory/${productId}/edit`}
+          className="block rounded-xl border border-slate-200 bg-white p-4 text-center text-sm font-medium text-emerald-600 hover:bg-emerald-50"
+        >
+          Edit product details
+        </a>
+
         <Card>
           <h2 className="mb-3 font-semibold">Recent movements</h2>
           {!movements?.length ? (

@@ -2,6 +2,8 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { checkAndSendLowStockAlert } from "@/lib/services/notifications";
+import { getActivePromotions } from "@/lib/actions/pricing";
+import { applyBestPromotion } from "@/lib/pricing/promotions";
 import type { CartItem } from "@/types/database";
 
 export async function completeSale(
@@ -26,8 +28,12 @@ export async function completeSale(
     (sum, item) => sum + item.product.sell_price * item.quantity,
     0
   );
-  const tax = subtotal * (Number(store.tax_rate) / 100);
-  const total = subtotal + tax;
+
+  const promotions = await getActivePromotions(storeId);
+  const { discount } = applyBestPromotion(subtotal, promotions);
+  const discountedSubtotal = subtotal - discount;
+  const tax = discountedSubtotal * (Number(store.tax_rate) / 100);
+  const total = discountedSubtotal + tax;
 
   const { count } = await supabase
     .from("sales")
@@ -41,6 +47,7 @@ export async function completeSale(
       store_id: storeId,
       sale_number: saleNumber,
       subtotal,
+      discount,
       tax,
       total,
       payment_method: paymentMethod,
@@ -58,8 +65,8 @@ export async function completeSale(
       .eq("product_id", item.product.id)
       .single();
 
-    const currentQty = inv?.quantity_on_hand ?? 0;
-    if (currentQty < item.quantity) {
+    const previousQty = inv?.quantity_on_hand ?? 0;
+    if (previousQty < item.quantity) {
       throw new Error(`Insufficient stock for ${item.product.name}`);
     }
 
@@ -73,7 +80,7 @@ export async function completeSale(
       line_total: item.product.sell_price * item.quantity,
     });
 
-    const newQty = currentQty - item.quantity;
+    const newQty = previousQty - item.quantity;
     await supabase
       .from("inventory_levels")
       .update({ quantity_on_hand: newQty })
@@ -91,8 +98,66 @@ export async function completeSale(
       ...item.product,
       inventory_levels: { quantity_on_hand: newQty },
     };
-    await checkAndSendLowStockAlert(updatedProduct, store, user.id);
+    await checkAndSendLowStockAlert(updatedProduct, store, user.id, previousQty);
   }
 
   return sale;
+}
+
+export async function voidSale(saleId: string) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
+  const { data: sale } = await supabase
+    .from("sales")
+    .select("*, sale_items(*)")
+    .eq("id", saleId)
+    .single();
+
+  if (!sale) throw new Error("Sale not found");
+  if (sale.status === "voided") throw new Error("Sale already voided");
+
+  const saleDate = new Date(sale.created_at);
+  const today = new Date();
+  if (saleDate.toDateString() !== today.toDateString()) {
+    throw new Error("Only same-day sales can be voided");
+  }
+
+  const items = sale.sale_items as Array<{
+    product_id: string;
+    quantity: number;
+  }>;
+
+  for (const item of items) {
+    const { data: inv } = await supabase
+      .from("inventory_levels")
+      .select("quantity_on_hand")
+      .eq("product_id", item.product_id)
+      .single();
+
+    const newQty = (inv?.quantity_on_hand ?? 0) + item.quantity;
+    await supabase
+      .from("inventory_levels")
+      .update({ quantity_on_hand: newQty })
+      .eq("product_id", item.product_id);
+
+    await supabase.from("stock_movements").insert({
+      product_id: item.product_id,
+      quantity_change: item.quantity,
+      movement_type: "void",
+      reference_id: saleId,
+      created_by: user.id,
+      notes: `Void sale ${sale.sale_number}`,
+    });
+  }
+
+  await supabase
+    .from("sales")
+    .update({ status: "voided" })
+    .eq("id", saleId);
+
+  return { success: true };
 }

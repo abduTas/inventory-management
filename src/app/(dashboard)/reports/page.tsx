@@ -4,6 +4,8 @@ import { Card, CardHeader } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/utils";
 import { getStoreContext } from "@/lib/helpers/store-context";
 import { ReportsClient } from "@/containers/reports/reports-client";
+import { getStockQty, getEffectiveThreshold } from "@/types/database";
+import { format, subDays } from "date-fns";
 
 export default async function ReportsPage() {
   const supabase = await createClient();
@@ -14,10 +16,12 @@ export default async function ReportsPage() {
 
   let sales: Array<{ total: number; created_at: string }> = [];
   let topProducts: Array<{ product_name: string; total_qty: number; total_revenue: number }> = [];
+  let dailySales: Array<{ date: string; revenue: number; count: number }> = [];
+  let lowStockProducts: Array<{ name: string; sku: string; qty: number; threshold: number }> = [];
+  let inventoryValue = 0;
 
   if (store) {
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const thirtyDaysAgo = subDays(new Date(), 30);
 
     const { data: salesData } = await supabase
       .from("sales")
@@ -28,6 +32,20 @@ export default async function ReportsPage() {
       .order("created_at", { ascending: false });
 
     sales = salesData ?? [];
+
+    const dailyMap = new Map<string, { revenue: number; count: number }>();
+    sales.forEach((s) => {
+      const date = format(new Date(s.created_at), "MMM d");
+      const existing = dailyMap.get(date) ?? { revenue: 0, count: 0 };
+      dailyMap.set(date, {
+        revenue: existing.revenue + Number(s.total),
+        count: existing.count + 1,
+      });
+    });
+    dailySales = Array.from(dailyMap.entries()).map(([date, stats]) => ({
+      date,
+      ...stats,
+    }));
 
     const { data: items } = await supabase
       .from("sale_items")
@@ -49,6 +67,21 @@ export default async function ReportsPage() {
       .map(([product_name, stats]) => ({ product_name, ...stats }))
       .sort((a, b) => b.total_revenue - a.total_revenue)
       .slice(0, 10);
+
+    const { data: products } = await supabase
+      .from("products")
+      .select("*, inventory_levels(quantity_on_hand)")
+      .eq("store_id", store.id)
+      .eq("is_active", true);
+
+    products?.forEach((p) => {
+      const qty = getStockQty(p);
+      inventoryValue += qty * Number(p.cost_price);
+      const threshold = getEffectiveThreshold(p, store.default_reorder_level);
+      if (qty <= threshold) {
+        lowStockProducts.push({ name: p.name, sku: p.sku, qty, threshold });
+      }
+    });
   }
 
   const totalRevenue = sales.reduce((s, x) => s + Number(x.total), 0);
@@ -81,6 +114,9 @@ export default async function ReportsPage() {
           totalRevenue={totalRevenue}
           transactionCount={sales.length}
           topProducts={topProducts}
+          dailySales={dailySales}
+          lowStockProducts={lowStockProducts}
+          inventoryValue={inventoryValue}
         />
 
         <Card>
