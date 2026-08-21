@@ -2,6 +2,10 @@
 
 A mobile-first Next.js store management app with inventory, POS selling, reports (PDF), and PWA push notifications.
 
+## Repository
+
+https://github.com/abduTas/inventory-management
+
 ## Setup
 
 ### 1. Supabase database
